@@ -1,0 +1,297 @@
+---
+title: "Gradiente Descendente"
+author: "Maitê Mückler"
+date: "5/24/2022"
+output:
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+    self_contained: false
+    thumbnails: false
+    lightbox: true
+    gallery: true
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tibble)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(gganimate)
+library(gifski)
+```
+
+## Início
+
+Gradiente descendente é um algoritmo de otimização usado em muitas aplicações de machine learning. Ao pensar conceitualmente em gradiente descendente, o cenário descrito anteriormente de andar em um prado com os olhos vendados é novamente útil. Se estivéssemos tentando encontrar o ponto mais baixo, provavelmente tateariamos ao nosso redor e encontraríamos a direção que parecia mais íngreme. Daríamos então um passo nessa direção. Se estivéssemos sendo cuidadosos, verificaríamos o terreno ao nosso redor novamente após cada passo, avaliando o gradiente imediatamente ao nosso redor e continuando na direção mais íngreme. Esta é a ideia básica do gradiente descendente. Começamos em um local aleatório em alguma superfície e damos um passo na direção mais íngreme até não podermos descer mais.
+
+Considere um exemplo simples como o modelo de regressão linear. Primeiro, vamos simular alguns dados.
+
+```{r}
+set.seed(42)
+n <- 1000
+x <- rnorm(n)
+
+a <- 5
+b <- 1.3
+e <- 4
+
+y <- a + b*x + rnorm(n, sd = e)
+
+sim_d <- tibble(x = x, y = y)
+
+ggplot(sim_d, aes(x, y)) +
+  geom_point() 
+```
+
+Podemos estimar a relação entre *x* e *y* usando mínimos quadrados ordinários (MQO), da seguinte forma:
+
+```{r}
+sim_ols <- lm(y ~ x)
+summary(sim_ols)
+```
+
+Isso não apenas nos fornece a melhor estimativa linear não-viesada da relação entre *x* e *y*, mas é calculado extremamente rápido (cerca de um décimo de segundo no meu computador).
+
+Vamos ver se podemos replicar esses valores usando gradiente descendente. Estaremos estimando dois parâmetros, o intercepto e a inclinação da reta (como acima). Nossa *função objetivo* é o *erro quadrático médio* (EQM). Ou seja, queremos encontrar a reta que atravessa os dados que minimiza a distância média entre a reta e os pontos. No caso de regressão linear simples, o erro quadrático médio é definido por
+
+$$\frac{1}{N} \sum_{i=1}^{n} (y_i - (a + bx_i ))^2$$
+
+onde *a* é o intercepto e *b* a inclinação da reta. Vamos escrever uma função em R que calcula o erro quadrático médio para qualquer reta:
+
+```{r}
+mse <- function(a, b, x = sim_d$x, y = sim_d$y) {
+  prediction <- a + b*x # model prediction, given intercept/slope
+  residuals <- y - prediction # distance between prediction & observed
+  squared_residuals <- residuals^2 # squared to avoid summation to zero
+  ssr <- sum(squared_residuals) # sum of squared distances
+  
+  mean(ssr) # average of squared distances
+}
+```
+
+Observe acima que nós pré-definimos os valores *x* e *y* a partir de nossos dados simulados, mas a função é geral o suficiente para calcular o erro quadrático médio para qualquer conjunto de dados.
+
+Apenas para confirmar que nossa função funciona, vamos verificar se nosso EQM com os coeficientes MQO corresponde ao que obtemos do modelo.
+
+```{r}
+mse(a = coef(sim_ols)[1], b = coef(sim_ols)[2])
+```
+
+É a mesma coisa que obtemos se computarmos a partir dos resíduos do modelo?
+
+```{r}
+sum(resid(sim_ols)^2)
+```
+
+Exatamente o mesmo!
+
+Então agora temos uma função geral que pode ser usada para avaliar nossa função objetivo para qualquer combinação de intercepto/inclinação. Podemos então, teoricamente, avaliar infinitas combinações e encontrar o menor valor. Vejamos várias centenas de combinações.
+
+```{r}
+# candidate values
+grid <- expand.grid(a = seq(-5, 10, 0.1), b = seq(-5, 5, 0.1)) %>% 
+  as_tibble()
+grid
+```
+
+Poderíamos, é claro, sobrepor tudo isso em nossos dados, mas isso seria muito difícil de analisar com 15.251 linhas candidatas. Vamos calcular o EQM para cada candidato.
+
+```{r}
+mse_grid <- grid %>% 
+  rowwise(a, b) %>% 
+  summarize(mse = mse(a, b), .groups = "drop")
+
+mse_grid
+```
+
+Vamos realmente olhar para esta grade
+
+```{r, warning=FALSE, message=FALSE}
+plot_ly(x=~a, y=~b, z=~mse, data = mse_grid, type = 'scatter3d') 
+```
+
+Observe que isso é basicamente apenas um grande vale porque esse é um problema muito simples (e linear). Queremos encontrar a combinação que minimiza o EQM que, neste caso, é:
+
+```{r}
+mse_grid %>% 
+  arrange(mse) %>% 
+  slice(1)
+```
+
+Como isso se compara ao que estimamos com o MQO?
+
+```{r}
+coef(sim_ols)
+```
+
+Muito similar.
+
+Mas isso ainda não é gradiente descendente. Este é basicamente apenas um algoritmo de busca gigante que só é viável porque o problema é muito simples.
+
+Então, o que é gradiente descendente e como podemos implementá-lo? Conceitualmente, é semelhante à nossa caminhada com os olhos vendados - começamos em um local aleatório e tentamos descer a ladeira até chegarmos ao que achamos ser o ponto mais baixo. Uma descrição mais técnica é fornecida abaixo:
+
+* Defina uma função custo (como EQM).
+* Calcule a derivada parcial de cada parâmetro da função custo.
+* Elas fornecem o gradiente (inclinação) e a direção que o algoritmo precisa “se mover” para minimizar a função custo.
+* Defina uma taxa de aprendizado. Este é o tamanho do “passo” que damos ladeira abaixo.
+* Multiplique a taxa de aprendizado pelo valor da derivada parcial (é assim que realmente “descemos”).
+* Estime um novo gradiente e continue iterando ($\text{gradient} \rightarrow \text{step} \rightarrow \text{gradient} \rightarrow \text{step} \dots$) até que não sejam feitas mais melhorias.
+
+Vamos tentar aplicar gradiente descendente ao nosso problema de regressão linear simples. Primeiro, temos que obter a derivada parcial de cada parâmetro, *a* e *b*, para nossa função de custo. Isso é definido como
+
+$$
+\begin{bmatrix}
+     \frac{d}{da}\\
+     \frac{d}{db}\\
+    \end{bmatrix}
+=
+   \begin{bmatrix}
+     \frac{1}{N} \sum -2(y_i - (a + bx_i)) \\
+     \frac{1}{N} \sum -2x_i(y_i - (a + bx_i)) \\
+    \end{bmatrix}
+$$
+
+Vamos escrever uma função para calcular o gradiente (derivada parcial) para quaisquer valores dos dois parâmetros. Semelhante à função `mse()` que escrevemos, vamos definir isso assumindo os dados `sim_d`, mas que seja geral o suficiente para que outros dados possam ser fornecidos.
+
+```{r}
+compute_gradient <- function(a, b, x = sim_d$x, y = sim_d$y) {
+  n <- length(y)
+  predictions <- a + (b * x)
+  residuals <- y - predictions
+  
+  da <- (1/n) * sum(-2*residuals)
+  db <- (1/n) * sum(-2*x*residuals)
+  
+  c(da, db)
+}
+```
+
+Excelente! Em seguida, escreveremos uma função que usa a função acima para calcular o gradiente, mas na verdade dá um passo nessa direção. Fazemos isso primeiro multiplicando nossas derivadas parciais por nossa taxa de aprendizado (o tamanho de cada etapa) e, em seguida, subtraindo esse valor de quaisquer que sejam os parâmetros atuais. Subtraímos porque estamos tentando “descer a ladeira”. Se estivéssemos tentando maximizar nossa função objetivo, adicionaríamos esses valores aos nossos parâmetros atuais (tecnicamente gradiente ascendente).
+
+A taxa de aprendizado define o tamanho do passo que damos ladeira abaixo. Taxas de aprendizado mais altas nos aproximarão da solução ideal mais rapidamente, mas podem “passar por cima” do mínimo. Ao treinar um modelo, comece com uma taxa de aprendizado relativamente alta (por exemplo, 0.1) e ajuste conforme necessário. Antes de finalizar seu modelo, considere reduzir a taxa de aprendizado para garantir que você tenha encontrado o mínimo global.
+
+```{r}
+gd_step <- function(a, b, 
+                    learning_rate = 0.1, 
+                    x = sim_d$x, 
+                    y = sim_d$y) {
+  grad <- compute_gradient(a, b, x, y)
+  step_a <- grad[1] * learning_rate
+  step_b <- grad[2] * learning_rate
+  
+  c(a - step_a, b - step_b)
+}
+```
+
+E, finalmente, escolhemos um local aleatório para começar e começamos nossa caminhada! Vamos começar em 0 para cada parâmetro.
+
+```{r}
+walk <- gd_step(0, 0)
+walk
+```
+
+Após apenas uma única etapa, nossos parâmetros mudaram bastante. Lembre-se de que nossos verdadeiros valores são 5 e 1.3. Ambos os parâmetros parecem estar indo na direção certa. Vamos dar mais alguns passos. Observe que abaixo estamos dando um passo a partir do local anterior.
+
+```{r}
+walk <- gd_step(walk[1], walk[2])
+walk
+walk <- gd_step(walk[1], walk[2])
+walk
+walk <- gd_step(walk[1], walk[2])
+walk
+```
+
+Nossos parâmetros continuam na direção correta. No entanto, a quantidade que os valores mudam diminui a cada iteração. Isso ocorre porque o gradiente é menos acentuado. Portanto, nosso “passo” não nos leva tão longe, mesmo que o tamanho do nosso passo seja o mesmo.
+
+Vamos acelerar um pouco (embora você possa continuar a “observar” a mudança dos parâmetros) usando um loop para descer rapidamente mais 25 passos.
+
+```{r}
+for(i in 1:25) {
+  walk <- gd_step(walk[1], walk[2])
+}
+walk
+```
+
+E agora estamos muito perto! E se dermos **mais** 25 passos?
+
+```{r}
+for(i in 1:25) {
+  walk <- gd_step(walk[1], walk[2])
+}
+walk
+```
+
+Recebemos *quase* exatamente a mesma coisa. Por quê? Porque nós já estávamos basicamente lá. Se continuarmos a tentar descer, acabamos andando em círculos.
+
+Vamos reescrever um pouco nossas funções para tornar os resultados um pouco mais fáceis de armazenar e inspecionar mais tarde.
+
+```{r}
+estimate_gradient <- function(pars_tbl, learning_rate = 0.1, 
+                              x = sim_d$x, y = sim_d$y) {
+  
+  pars <- gd_step(pars_tbl[["a"]], pars_tbl[["b"]],
+                  learning_rate)
+  
+  tibble(a = pars[1], b = pars[2], mse = mse(a, b, x, y))
+}
+
+# initialize
+grad <- estimate_gradient(tibble(a = 0, b = 0))
+
+# loop through
+for(i in 2:50) {
+  grad[i, ] <- estimate_gradient(grad[i - 1, ])
+}
+grad
+```
+
+Por fim, vamos adicionar nosso número de iteração ao data frame e plotá-lo.
+
+```{r}
+grad <- grad %>% 
+  rowid_to_column("iteration")
+
+ggplot(grad, aes(iteration, mse)) +
+  geom_line()
+```
+
+Como seria de esperar, o EQR cai muito rapidamente à medida que começamos a andar ladeira abaixo (a cada iteração), mas eventualmente (cerca de 20 ou mais iterações) começa a se estabilizar quando não há mais progresso.
+
+Vejamos isso de maneira um pouco diferente, analisando nossa superfície de custo e como reduzimos a superfície de custo.
+
+Você pode ver que, como seria de esperar, o algoritmo nos leva direto “para baixo”.
+
+Finalmente, como esta é uma regressão linear simples, também podemos traçar a linha através das iterações (à medida que o algoritmo “aprende” a combinação ótima de intercepto/inclinação).
+
+```{r}
+ggplot(sim_d, aes(x, y)) +
+  geom_point() +
+  geom_abline(aes(intercept = a, slope = b),
+              data = grad,
+              color = "gray60",
+              size = 0.3) +
+  geom_abline(aes(intercept = a, slope = b),
+              data = grad[nrow(grad), ],
+              color = "magenta")
+```
+
+Ou, apenas por diversão, poderíamos animá-lo.
+
+```{r}
+ggplot(grad) +
+  geom_point(aes(x, y), sim_d) +
+  geom_smooth(aes(x, y), sim_d, 
+              method = "lm", se = FALSE) +
+  geom_abline(aes(intercept = a,
+                  slope = b),
+              color = "#de4f60") +
+  transition_manual(frames = iteration)
+```
+
+Então, no final, o gradiente descendente nos dá essencialmente a mesma resposta que obtemos com o MQO. Então, por que usaríamos essa abordagem? Bem, se estivéssemos estimando um modelo com algo como regressão, não o faríamos. Como provavelmente é aparente, essa abordagem será mais cara computacionalmente, principalmente se tivermos uma localização inicial ruim. Mas em muitos casos não temos uma solução fechada para o problema. É aqui que a descida do gradiente (ou uma variante dela) pode ajudar. No caso de árvores impulsionadas, começamos construindo um modelo fraco com apenas algumas divisões (incluindo potencialmente apenas uma). Em seguida, construímos um novo modelo (fraco) a partir dos resíduos desse modelo, usando gradiente descendente para otimizar cada divisão na árvore em relação à função de custo. Isso garante que nosso conjunto de árvores seja construído em direção ao mínimo (ou máximo) de nossa função de custo.
+
+Como provavelmente está claro, no entanto, gradiente descendente é um tópico bastante complicado. Optamos por focar em uma implementação relativamente “fácil” dentro de uma estrutura de regressão linear simples, que possui apenas dois parâmetros. Existem várias armadilhas em potencial relacionadas à descida de gradiente, incluindo gradientes explosivos, onde o algoritmo de busca se “perde” e basicamente vagueia pelo espaço. Isso pode acontecer se a taxa de aprendizado for muito alta. Normalizar seus recursos para que estejam todos em uma escala comum também pode ajudar a evitar gradientes explosivos. O desaparecimento de gradientes é um problema semelhante, onde o gradiente é pequeno o suficiente para que os novos parâmetros não mudem muito e o algoritmo fique “travado”. Isso é bom (e esperado) se o algoritmo atingiu o mínimo global, mas é um problema se estiver apenas no mínimo local (ou seja, preso em um vale em uma colina). Existem inúmeras variantes de gradiente descendente que podem ajudar com esses desafios, como discutiremos nos capítulos subsequentes.
+
+https://www.sds.pub/gradient-descent.html

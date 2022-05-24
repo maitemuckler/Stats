@@ -1,0 +1,59 @@
+---
+title: "Regressão Logística"
+author: "Maitê Mückler"
+date: "5/24/2022"
+output:
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+    self_contained: false
+    thumbnails: false
+    lightbox: true
+    gallery: true
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Regressão logística
+
+Modelar o logarítmo do odds ratio, $ln(\frac{p}{1-p})$, como uma combinação linear das variáveis preditoras, por exemplo, $\beta_0 + \beta_1x$. Dessa forma, temos que
+
+$$ln(\frac{p}{1-p}) = \beta_0 + \beta_1x$$
+Podemos rearranjar a equação acima em função de **p**, onde **p** é a probabilidade de uma observação pertencer a classe 1 ao invés da classe 0,
+
+$$p = \frac{e^{\beta_0 + \beta_1x}}{1+e^{\beta_0 + \beta_1x}}$$
+
+Dado que esse modelo é correto, qual a probabilidade de observarmos esses dados que temos?
+
+$$\text{Likelihood} = \prod_{i=1}^{N} p_{i}^{y_i}(1-p_{i})^{1-y_i}$$
+
+Porém, ao programar o estimador de máxima verossimilhança podemos ter problemas numéricos de *underflow* por multiplicarmos um monte de probabilidades podemos acabar fazendo com o isso tenda a zero, porque não temos precisão suficiente. Por conta disso, vamos utilizar o log da máxima verossimilhança porque é fácil de trabalhar e porque nos dá a mesma solução no final.
+
+$$LL = log(\text{Likelihood}) = \sum_{i=1}^{N} y_ilog(p_i) + (1-y_i)log(1-p_i)$$
+
+Como não temos uma forma fechada para a solução dos betas, por isso vamos utilizar o gradiente ascendente para encontrar o máximo do log da máxima verossimilhança.
+
+O principal passo no algorítmo de gradiente ascentente é encontrar as derivadas parciais da função objetivo (neste caso, o log da máxima verossimilhança com respeito aos parâmetros beta), que neste caso são, para $\beta_0$
+
+$$\frac{\partial LL}{\partial \beta_0} = \sum_{i=1}^{N} (y_i - p_i)$$
+e para $\beta_1$
+
+$$\frac{\partial LL}{\partial \beta_1} = \sum_{i=1}^{N} (y_i - p_i) x_i\text{.}$$
+
+
+Obs.: Em matemática, uma expressão é dita ser uma expressão de forma fechada se, e somente se, pode ser expressa analiticamente em termos de um número delimitado de certas funções bem conhecidas. Tipicamente, estas bem conhecidas funções são definidas ser funções elementares - constantes, uma variável x, operações elementares de aritmética (+ – × ÷ –), raízes n-ésimas, exponenciais e logaritmos (os quais então também incluem funções trigonometricas e funções trigonometricas inversas). 
+
+Para demonstrar isso, vamos primeiro gerar 40 dados,
+
+```{r}
+set.seed(22)
+x = c(rnorm(20, 1.15, sqrt(1.1504001927076635)) + 1, rnorm(20, 1.15, sqrt(1.1504001927076635)) - 0.5)
+y = c(rep(1, times = 20), rep(0, times = 20))
+df <- data.frame(y = sample(y), x = sample(x))
+head(df)
+
+plot(x,y)
+```
+
