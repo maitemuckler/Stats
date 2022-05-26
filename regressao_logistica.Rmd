@@ -14,6 +14,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
 ```
 
 Regressão logística
@@ -42,7 +43,6 @@ e para $\beta_1$
 
 $$\frac{\partial LL}{\partial \beta_1} = \sum_{i=1}^{N} (y_i - p_i) x_i\text{.}$$
 
-
 Obs.: Em matemática, uma expressão é dita ser uma expressão de forma fechada se, e somente se, pode ser expressa analiticamente em termos de um número delimitado de certas funções bem conhecidas. Tipicamente, estas bem conhecidas funções são definidas ser funções elementares - constantes, uma variável x, operações elementares de aritmética (+ – × ÷ –), raízes n-ésimas, exponenciais e logaritmos (os quais então também incluem funções trigonometricas e funções trigonometricas inversas). 
 
 Para demonstrar isso, vamos primeiro gerar 40 dados,
@@ -54,6 +54,43 @@ y = c(rep(1, times = 20), rep(0, times = 20))
 df <- data.frame(y = sample(y), x = sample(x))
 head(df)
 
-plot(x,y)
+ggplot() + 
+  geom_point(data = df, aes(x = x, y = y))
 ```
 
+
+```{r}
+calculate_gradient_log_likelihood <- function(curr_betas, data){
+  numerator = exp(curr_betas[1] + curr_betas[2]*df$x)
+  p = numerator/(1 + numerator)
+  partial_0 = sum(df$y - p)
+  partial_1 = sum((df$y - p)*df$x)
+  return(list(partial_0, partial_1))
+}
+
+curr_betas = c(0.0, 0.0)
+diff = Inf
+eta = 0.01 #learning rate : learning rates muito grandes podem fazer o algoritmo não convergir
+
+while (diff > 0.001) {
+  grad = calculate_gradient_log_likelihood(curr_betas, df)
+  grad = unlist(grad)
+  
+  diff = sum(abs(grad))
+  curr_betas = curr_betas + (eta*grad)
+}
+
+print(curr_betas)
+glm(y ~ x, family = binomial(link='logit'), data = df)$coeff
+
+#x_vals = seq(min(df$x), max(df$x), 0.001)
+x_vals = seq(-150, 150, 0.1)
+p_vals = 1 / (1 + exp(-(curr_betas[1] + curr_betas[2]*x_vals)))
+
+df_est <- data.frame(x_vals = x_vals, p_vals = p_vals)
+
+ggplot() + 
+  geom_point(data = df, aes(y = y, x = x)) + 
+  geom_line(data = df_est, aes(y = p_vals, x = x_vals))
+
+```

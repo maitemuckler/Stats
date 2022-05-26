@@ -152,53 +152,22 @@
 <p><span class="math display">\[\frac{\partial LL}{\partial \beta_0} = \sum_{i=1}^{N} (y_i - p_i)\]</span> e para <span class="math inline">\(\beta_1\)</span></p>
 <p><span class="math display">\[\frac{\partial LL}{\partial \beta_1} = \sum_{i=1}^{N} (y_i - p_i) x_i\text{.}\]</span></p>
 <p>Obs.: Em matemática, uma expressão é dita ser uma expressão de forma fechada se, e somente se, pode ser expressa analiticamente em termos de um número delimitado de certas funções bem conhecidas. Tipicamente, estas bem conhecidas funções são definidas ser funções elementares - constantes, uma variável x, operações elementares de aritmética (+ – × ÷ –), raízes n-ésimas, exponenciais e logaritmos (os quais então também incluem funções trigonometricas e funções trigonometricas inversas).</p>
-<p>Para demonstrar isso, vamos primeiro gerar dados,</p>
+<p>Para demonstrar isso, vamos primeiro gerar 40 dados,</p>
 <pre class="r"><code>set.seed(22)
-x = rnorm(40, 1.15, sqrt(1.1504001927076635))
-y = sample(c(rep(1, times = 20), rep(0, times = 20)))
-df &lt;- data.frame(y = y, x = x)
-df</code></pre>
-<pre><code>##    y           x
-## 1  0  0.60069646
-## 2  0  3.81552626
-## 3  0  2.23096118
-## 4  0  1.46406328
-## 5  1  0.92587706
-## 6  0  3.14292877
-## 7  1  1.07918225
-## 8  0  0.97542367
-## 9  0  0.93563601
-## 10 1  1.47237263
-## 11 1  0.33065818
-## 12 1  1.23790964
-## 13 1  1.94694769
-## 14 0  1.05988056
-## 15 1  0.29956742
-## 16 1  0.16092835
-## 17 0  2.07408347
-## 18 1  3.29828990
-## 19 1  2.15451381
-## 20 0 -0.58298407
-## 21 1  0.53321322
-## 22 0  1.14573860
-## 23 0  0.42482386
-## 24 0  0.02420324
-## 25 1  0.56729513
-## 26 0  1.74650233
-## 27 0  1.42118542
-## 28 1  0.18274325
-## 29 1  2.03421505
-## 30 1 -0.52350474
-## 31 1  1.72703467
-## 32 1 -0.21039466
-## 33 0  1.83700050
-## 34 0  0.57535950
-## 35 0  0.05636466
-## 36 0  0.28349287
-## 37 1  1.21094887
-## 38 1  2.16916549
-## 39 0 -0.05852946
-## 40 1  0.93423350</code></pre>
+x = c(rnorm(20, 1.15, sqrt(1.1504001927076635)) + 1, rnorm(20, 1.15, sqrt(1.1504001927076635)) - 0.5)
+y = c(rep(1, times = 20), rep(0, times = 20))
+df &lt;- data.frame(y = sample(y), x = sample(x))
+head(df)</code></pre>
+<pre><code>##   y           x
+## 1 0 -0.47579676
+## 2 0 -0.55852946
+## 3 0  4.81552626
+## 4 0  1.93563601
+## 5 1  1.16092835
+## 6 0 -0.07517614</code></pre>
+<pre class="r"><code>ggplot() + 
+  geom_point(data = df, aes(x = x, y = y))</code></pre>
+<p><img src="regressao_logistica_files/figure-html/unnamed-chunk-1-1.png" width="768" /></p>
 </div>
 
    
